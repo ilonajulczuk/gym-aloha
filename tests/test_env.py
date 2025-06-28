@@ -13,6 +13,8 @@ import gym_aloha  # noqa: F401
         ("AlohaInsertion-v0", "pixels_agent_pos"),
         ("AlohaTransferCube-v0", "pixels"),
         ("AlohaTransferCube-v0", "pixels_agent_pos"),
+        ("SO100TransferCube-v0", "pixels"),
+        ("SO100TransferCube-v0", "so100_pixels_agent_pos"),
     ],
 )
 def test_aloha(env_task, obs_type):

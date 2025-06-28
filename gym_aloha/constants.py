@@ -67,6 +67,29 @@ START_ARM_POSE = [
 ]
 
 
+SO100_JOINTS = [
+    # absolute joint position
+    "left_arm_waist",
+    "left_arm_shoulder",
+    "left_arm_elbow",
+    "left_arm_forearm_roll",
+    "left_arm_wrist_rotate",
+    # normalized gripper position 0: close, 1: open
+    "left_arm_gripper",
+]
+
+SO100_ACTIONS = [
+    # position and quaternion for end effector
+    "left_arm_waist",
+    "left_arm_shoulder",
+    "left_arm_elbow",
+    "left_arm_forearm_roll",
+    "left_arm_wrist_rotate",
+    # normalized gripper position (0: close, 1: open)
+    "left_arm_gripper",
+]
+
+
 SO100_START_ARM_POSE = [
     0.0,  # left_arm_waist
     -0.96,  # left_arm_shoulder

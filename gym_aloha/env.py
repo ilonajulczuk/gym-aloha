@@ -9,6 +9,7 @@ from gym_aloha.constants import (
     ASSETS_DIR,
     DT,
     JOINTS,
+    SO100_JOINTS,
 )
 from gym_aloha.tasks.sim import BOX_POSE, InsertionTask, SO100TransferCubeTask, TransferCubeTask
 from gym_aloha.tasks.sim_end_effector import (
@@ -82,6 +83,27 @@ class AlohaEnv(gym.Env):
                     ),
                 }
             )
+        elif self.obs_type == "so100_pixels_agent_pos":
+            self.observation_space = spaces.Dict(
+                {
+                    "pixels": spaces.Dict(
+                        {
+                            "top": spaces.Box(
+                                low=0,
+                                high=255,
+                                shape=(self.observation_height, self.observation_width, 3),
+                                dtype=np.uint8,
+                            )
+                        }
+                    ),
+                    "agent_pos": spaces.Box(
+                        low=-1000.0,
+                        high=1000.0,
+                        shape=(len(SO100_JOINTS),),
+                        dtype=np.float64,
+                    ),
+                }
+            )
 
         self.action_space = spaces.Box(low=-1, high=1, shape=(len(ACTIONS),), dtype=np.float32)
 
@@ -145,6 +167,11 @@ class AlohaEnv(gym.Env):
         elif self.obs_type == "pixels":
             obs = {"top": raw_obs["images"]["top"].copy()}
         elif self.obs_type == "pixels_agent_pos":
+            obs = {
+                "pixels": {"top": raw_obs["images"]["top"].copy()},
+                "agent_pos": raw_obs["qpos"],
+            }
+        elif self.obs_type == "so100_pixels_agent_pos":
             obs = {
                 "pixels": {"top": raw_obs["images"]["top"].copy()},
                 "agent_pos": raw_obs["qpos"],
