@@ -10,7 +10,7 @@ from gym_aloha.constants import (
     DT,
     JOINTS,
 )
-from gym_aloha.tasks.sim import BOX_POSE, InsertionTask, TransferCubeTask
+from gym_aloha.tasks.sim import BOX_POSE, InsertionTask, SO100TransferCubeTask, TransferCubeTask
 from gym_aloha.tasks.sim_end_effector import (
     InsertionEndEffectorTask,
     TransferCubeEndEffectorTask,
@@ -117,6 +117,10 @@ class AlohaEnv(gym.Env):
             xml_path = ASSETS_DIR / "bimanual_viperx_insertion.xml"
             physics = mujoco.Physics.from_xml_path(str(xml_path))
             task = InsertionTask()
+        elif task_name == "so100_transfer_cube":
+            xml_path = ASSETS_DIR / "so100_transfer_cube.xml"
+            physics = mujoco.Physics.from_xml_path(str(xml_path))
+            task = SO100TransferCubeTask()
         elif task_name == "end_effector_transfer_cube":
             raise NotImplementedError()
             xml_path = ASSETS_DIR / "bimanual_viperx_end_effector_transfer_cube.xml"
@@ -160,6 +164,8 @@ class AlohaEnv(gym.Env):
             BOX_POSE[0] = sample_box_pose(seed)  # used in sim reset
         elif self.task == "insertion":
             BOX_POSE[0] = np.concatenate(sample_insertion_pose(seed))  # used in sim reset
+        elif self.task == "so100_transfer_cube":
+            BOX_POSE[0] = sample_box_pose(seed)  # used in sim reset
         else:
             raise ValueError(self.task)
 
