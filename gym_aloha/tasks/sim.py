@@ -223,6 +223,7 @@ class InsertionTask(BimanualViperXTask):
 
 class SO100Task(base.Task):
     ARM_DOF = 5
+    GRIPPER_DOF = 2  # Dunno why 2 ???
     def __init__(self, random=None):
         super().__init__(random=random)
 
@@ -235,7 +236,8 @@ class SO100Task(base.Task):
         left_gripper_action = unnormalize_puppet_gripper_position(normalized_left_gripper_action)
         # right_gripper_action = unnormalize_puppet_gripper_position(normalized_right_gripper_action)
 
-        full_left_gripper_action = [left_gripper_action, -left_gripper_action]
+        # full_left_gripper_action = [left_gripper_action, -left_gripper_action]
+        full_left_gripper_action = [left_gripper_action]
         # full_right_gripper_action = [right_gripper_action, -right_gripper_action]
 
         env_action = np.concatenate(
@@ -251,7 +253,7 @@ class SO100Task(base.Task):
     @staticmethod
     def get_qpos(physics):
         qpos_raw = physics.data.qpos.copy()
-        left_qpos_raw = qpos_raw[:SO100Task.ARM_DOF + 2]  # Dunno why 2 ???
+        left_qpos_raw = qpos_raw[:SO100Task.ARM_DOF + SO100Task.GRIPPER_DOF] 
         # right_qpos_raw = qpos_raw[8:16]
         left_arm_qpos = left_qpos_raw[:SO100Task.ARM_DOF]
         # right_arm_qpos = right_qpos_raw[:6]
@@ -262,7 +264,7 @@ class SO100Task(base.Task):
     @staticmethod
     def get_qvel(physics):
         qvel_raw = physics.data.qvel.copy()
-        left_qvel_raw = qvel_raw[:SO100Task.ARM_DOF + 2]  # Dunno why 2 ???
+        left_qvel_raw = qvel_raw[:SO100Task.ARM_DOF + SO100Task.GRIPPER_DOF]
         # right_qvel_raw = qvel_raw[8:16]
         left_arm_qvel = left_qvel_raw[:SO100Task.ARM_DOF]
         # right_arm_qvel = right_qvel_raw[:6]
@@ -301,7 +303,7 @@ class SO100TransferCubeTask(SO100Task):
         # TODO Notice: this function does not randomize the env configuration. Instead, set BOX_POSE from outside
         # reset qpos, control and box position
         with physics.reset_context():
-            physics.named.data.qpos[:8] = SO100_START_ARM_POSE
+            physics.named.data.qpos[:6] = SO100_START_ARM_POSE
             np.copyto(physics.data.ctrl, SO100_START_ARM_POSE)
             assert BOX_POSE[0] is not None
             physics.named.data.qpos[-7:] = BOX_POSE[0]
@@ -310,7 +312,7 @@ class SO100TransferCubeTask(SO100Task):
 
     @staticmethod
     def get_env_state(physics):
-        env_state = physics.data.qpos.copy()[16:]
+        env_state = physics.data.qpos.copy()[6:]
         return env_state
 
     def get_reward(self, physics):

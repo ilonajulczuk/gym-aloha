@@ -74,7 +74,7 @@ SO100_START_ARM_POSE = [
     0.0,  # left_arm_forearm_roll
     0.0,  # left_arm_wrist_rotate
     0.02239,  # left_arm_gripper
-    -0.02239,  # left_arm_gripper (mirror)
+    # -0.02239,  # left_arm_gripper (mirror)
 ]
 
 ASSETS_DIR = Path(__file__).parent.resolve() / "assets"  # note: absolute path
