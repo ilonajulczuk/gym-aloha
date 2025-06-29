@@ -94,12 +94,19 @@ class AlohaEnv(gym.Env):
                    )
                 ,
                "agent_pos": spaces.Box(
-                        low=-1000.0,
-                        high=1000.0,
+                        low=-10.0,
+                        high=10.0,
                         shape=(len(SO100_JOINTS),),
                         dtype=np.float32,
                     ),
                 }
+            )
+        elif self.obs_type == "so100_state":
+            self.observation_space = spaces.Box(
+                low=-100.0,
+                high=100.0,
+                shape=(len(SO100_JOINTS) + 3 * 3,),  # joints + box + bin + ee
+                dtype=np.float32,
             )
 
         self.action_space = spaces.Box(low=-1, high=1, shape=(len(ACTIONS),), dtype=np.float32)
@@ -174,6 +181,13 @@ class AlohaEnv(gym.Env):
                 "pixels": rgb,
                 "agent_pos": raw_obs["qpos"].astype(np.float32),      # SO100 uses float32,
             }
+        elif self.obs_type == "so100_state":
+            obs = np.concatenate([
+                raw_obs["box_position"],
+                raw_obs["bin_position"],
+                raw_obs["ee_position"],
+                raw_obs["qpos"].astype(np.float32),    # SO100 uses float32,
+            ])
         return obs
 
     def reset(self, seed=None, options=None):
@@ -190,7 +204,7 @@ class AlohaEnv(gym.Env):
         elif self.task == "insertion":
             BOX_POSE[0] = np.concatenate(sample_insertion_pose(seed))  # used in sim reset
         elif self.task == "so100_transfer_cube":
-            BOX_POSE[0] = fixed_so100_box_pose(seed)  # used in sim reset
+            BOX_POSE[0] = sample_so100_box_pose(seed)  # used in sim reset
         else:
             raise ValueError(self.task)
 

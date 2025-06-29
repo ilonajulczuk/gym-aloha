@@ -282,6 +282,25 @@ class SO100Task(base.Task):
     def get_env_state(physics):
         raise NotImplementedError
 
+
+    def _precompute_bin_aabb(self, physics):
+        # call in reset(); store on self
+        site_id = physics.model.site("bin_center").id
+        center  = physics.data.site_xpos[site_id].copy()
+        self.bin_center = center
+        hw = 0.06         # half-width in xy  (edit to match XML)
+        h  = 0.03         # inner height      (edit to match XML)
+        self.bin_min = center + np.array([-hw, -hw, 0.0])
+        self.bin_max = center + np.array([ hw,  hw, h])
+        self.bin_center = center
+        self.bin_radius = hw         # for bonus
+        self.cube_half  = 0.01      # edge/2  (match cube size)
+
+    def _cube_inside_bin(self, cube_pos):
+        lower = cube_pos - self.cube_half
+        upper = cube_pos + self.cube_half
+        return np.all(lower > self.bin_min) and np.all(upper < self.bin_max)
+
     def get_observation(self, physics):
         obs = collections.OrderedDict()
         obs["qpos"] = self.get_qpos(physics)
@@ -292,6 +311,16 @@ class SO100Task(base.Task):
         obs["images"]["angle"] = physics.render(height=self.observation_height, width=self.observation_width, camera_id="angle")
         obs["images"]["vis"] = physics.render(height=self.observation_height, width=self.observation_width, camera_id="front_close")
 
+        self._precompute_bin_aabb(physics)
+        id_cube_site  = physics.model.site("cube_site").id
+        cube_pos      = physics.data.site_xpos[id_cube_site]
+
+        id_ee_site    = physics.model.site("ee_site").id
+        ee_pos        = physics.data.site_xpos[id_ee_site]
+        ee_cube_dist  = np.linalg.norm(ee_pos - cube_pos)
+        obs["box_position"] = cube_pos.astype(np.float32)  # SO100 uses float32
+        obs["bin_position"] = self.bin_center.astype(np.float32)  # SO100 uses float32
+        obs["ee_position"] = ee_pos.astype(np.float32)  #
         return obs
 
     def get_reward(self, physics):
@@ -322,23 +351,6 @@ class SO100TransferCubeTask(SO100Task):
     def get_env_state(physics):
         env_state = physics.data.qpos.copy()[6:]
         return env_state
-
-    def _precompute_bin_aabb(self, physics):
-        # call in reset(); store on self
-        site_id = physics.model.site("cube_site").id
-        center  = physics.data.site_xpos[site_id].copy()
-        hw = 0.06         # half-width in xy  (edit to match XML)
-        h  = 0.03         # inner height      (edit to match XML)
-        self.bin_min = center + np.array([-hw, -hw, 0.0])
-        self.bin_max = center + np.array([ hw,  hw, h])
-        self.bin_center = center
-        self.bin_radius = hw         # for bonus
-        self.cube_half  = 0.01      # edge/2  (match cube size)
-
-    def _cube_inside_bin(self, cube_pos):
-        lower = cube_pos - self.cube_half
-        upper = cube_pos + self.cube_half
-        return np.all(lower > self.bin_min) and np.all(upper < self.bin_max)
 
 
     def get_reward(self, physics):
@@ -393,6 +405,15 @@ class SO100TransferCubeTask(SO100Task):
         if ee_cube_dist < 0.3:  # 30 cm
             reach_bonus = 0.5 * (1 - np.clip(ee_cube_dist / 0.3, 0, 1))
             reward = max(reward, reach_bonus)
+
+        success = ee_cube_dist < 0.05                       # 5 cm
+        if success:                 # terminate early so SAC sees episode return
+            print("SUCCESS  dist =", ee_cube_dist)
+            return self.max_reward
+        reward -= 0.2
+
+        return reward
+
         # if touch_gripper:
         #     reward = max(reward, 0.60)
         # if touch_gripper and (not touch_table):
@@ -405,14 +426,5 @@ class SO100TransferCubeTask(SO100Task):
         #     d_xy  = np.linalg.norm(cube_pos[:2] - self.bin_center[:2])
         #     bonus = 0.5 * (1 - np.clip(d_xy / self.bin_radius, 0, 1))
         #     reward += bonus
-
-
-        success = ee_cube_dist < 0.05                       # 5 cm
-        if success:                 # terminate early so SAC sees episode return
-            print("SUCCESS  dist =", ee_cube_dist)
-            return self.max_reward
-        reward -= 0.2
-
-        return reward
 
 
