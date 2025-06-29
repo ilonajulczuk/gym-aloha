@@ -31,10 +31,10 @@ demo_env = VecNormalize(
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 # STEP 3: Load the model
-model = SAC.load("sac_so100_pixels_agentpos_5k", env=demo_env, device=device)
+model = SAC.load("./checkpoints/sac_so100_pixels_agentpos_20000_steps", env=demo_env, device=device)
 
 # STEP 4: Load the normalization statistics
-demo_env = VecNormalize.load("vec_normalize_stats_5k.pkl", demo_env)
+demo_env = VecNormalize.load("./checkpoints/vec_normalize_stats_20000.pkl", demo_env)
 
 print("Model and normalization stats loaded successfully!")
 
@@ -86,7 +86,7 @@ demo_env.close()
 # STEP 6: Save video
 if frames:
     print(f"Saving {len(frames)} frames to video...")
-    imageio.mimsave("so100_sac_demo_5k_n.mp4", np.stack(frames), fps=25)
-    print("Saved video to so100_sac_demo_5k_n.mp4")
+    imageio.mimsave("so100_sac_demo_50k_n_.mp4", np.stack(frames), fps=25)
+    print("Saved video to so100_sac_demo_50k_n_.mp4")
 else:
     print("No frames captured!")

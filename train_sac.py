@@ -72,6 +72,11 @@ def load_checkpoint(checkpoint_path, vec_env_stats_path, vec_env, log_dir):
     """Load model and vectorized environment from checkpoint."""
     print(f"Loading checkpoint from: {checkpoint_path}")
     
+    # Extract step count from checkpoint filename
+    import re
+    match = re.search(r'(\d+)_steps\.zip$', checkpoint_path)
+    start_steps = int(match.group(1)) if match else 0
+    
     # Load the model
     model = SAC.load(checkpoint_path)
     
@@ -88,13 +93,14 @@ def load_checkpoint(checkpoint_path, vec_env_stats_path, vec_env, log_dir):
     else:
         print("VecNormalize stats file not found, using fresh normalization")
     
-    return model, vec_env
+    print(f"Checkpoint loaded from step {start_steps}")
+    return model, vec_env, start_steps
 
 
-def create_callbacks(vec_env):
+def create_callbacks(vec_env, save_freq=2000):
     """Create training callbacks for model and environment checkpointing."""
     model_checkpoint = CheckpointCallback(
-        save_freq=10000,
+        save_freq=save_freq,
         save_path='./checkpoints/',
         name_prefix='sac_so100_pixels_agentpos',
     )
@@ -112,37 +118,60 @@ def create_callbacks(vec_env):
                 self.vec_env.save(f"{self.save_path}/vec_normalize_pixels_agentpos_stats_{self.n_calls}.pkl")
             return True
 
-    vec_env_checkpoint = VecEnvSaveCallback(10000, './checkpoints/', vec_env)
+    vec_env_checkpoint = VecEnvSaveCallback(save_freq, './checkpoints/', vec_env)
 
     # Combine both callbacks
     return CallbackList([model_checkpoint, vec_env_checkpoint])
 
 class StageBasedTraining:
-    def __init__(self, model, vec_env, callback=None):
+    def __init__(self, model, vec_env, callback=None, start_steps=0):
         self.model = model
         self.vec_env = vec_env
         self.callback = callback
+        self.start_steps = start_steps
+        
+        # Define stage boundaries
+        self.stage1_end = 20000
+        self.stage2_end = 35000
+        self.stage3_end = 50000
 
     def train(self):
+        current_steps = self.start_steps
+        
         # Stage 1: High exploration phase (0-20k steps)
-        print("Stage 1: Exploration phase")
-        self.model.target_entropy = -1.0  # High exploration
-        self.model.learning_rate = 3e-4   # Fast learning
-        self.model.learn(20000, callback=self.callback)
+        if current_steps < self.stage1_end:
+            remaining_stage1 = self.stage1_end - current_steps
+            print(f"Stage 1: Exploration phase (continuing from step {current_steps}, {remaining_stage1} steps remaining)")
+            self.model.target_entropy = -1.0  # High exploration
+            self.model.learning_rate = 3e-4   # Fast learning
+            self.model.learn(remaining_stage1, callback=self.callback)
+            current_steps = self.stage1_end
+        else:
+            print(f"Stage 1: Already completed (started from step {current_steps})")
         
         # Stage 2: Balanced phase (20k-35k steps)  
-        print("Stage 2: Balanced phase")
-        self.model.target_entropy = -2.0  # Medium exploration
-        self.model.learning_rate = 1e-4   # Medium learning
-        self.model.learn(15000, callback=self.callback)
+        if current_steps < self.stage2_end:
+            remaining_stage2 = self.stage2_end - current_steps
+            print(f"Stage 2: Balanced phase (continuing from step {current_steps}, {remaining_stage2} steps remaining)")
+            self.model.target_entropy = -3.0  # Low exploration
+            self.model.learning_rate = 1e-4   # Medium learning
+            self.model.learn(remaining_stage2, callback=self.callback)
+            current_steps = self.stage2_end
+        else:
+            print(f"Stage 2: Already completed (started from step {current_steps})")
         
         # Stage 3: Exploitation phase (35k-50k steps)
-        print("Stage 3: Exploitation phase") 
-        self.model.target_entropy = -3.0  # Low exploration
-        self.model.learning_rate = 5e-5   # Slow learning
-        self.model.learn(15000, callback=self.callback)
+        if current_steps < self.stage3_end:
+            remaining_stage3 = self.stage3_end - current_steps
+            print(f"Stage 3: Exploitation phase (continuing from step {current_steps}, {remaining_stage3} steps remaining)")
+            self.model.target_entropy = -3.0  # Low exploration
+            self.model.learning_rate = 5e-5   # Slow learning
+            self.model.learn(remaining_stage3, callback=self.callback)
+        else:
+            print(f"Stage 3: Already completed (started from step {current_steps})")
+            print("All training stages completed!")
 
-def train_model(checkpoint_path=None, vec_env_stats_path=None, total_steps=50000):
+def train_model(checkpoint_path=None, vec_env_stats_path=None, total_steps=50000, save_freq=2000):
     """Main training function with optional checkpoint loading."""
     log_dir = "logs/sac_so100"  # will hold TB files
     
@@ -150,18 +179,19 @@ def train_model(checkpoint_path=None, vec_env_stats_path=None, total_steps=50000
     vec_env = create_environment()
     
     # Create or load model
+    start_steps = 0
     if checkpoint_path and os.path.exists(checkpoint_path):
-        model, vec_env = load_checkpoint(checkpoint_path, vec_env_stats_path, vec_env, log_dir)
+        model, vec_env, start_steps = load_checkpoint(checkpoint_path, vec_env_stats_path, vec_env, log_dir)
         print(f"Resuming training from checkpoint: {checkpoint_path}")
     else:
         model = create_model(vec_env, log_dir)
         print("Starting training from scratch")
     
     # Create callbacks
-    combined_callback = create_callbacks(vec_env)
+    combined_callback = create_callbacks(vec_env, save_freq)
 
-    # Stage-based training
-    trainer = StageBasedTraining(model, vec_env, callback=combined_callback)
+    # Stage-based training with checkpoint awareness
+    trainer = StageBasedTraining(model, vec_env, callback=combined_callback, start_steps=start_steps)
     trainer.train()
 
     # Save final model and environment stats
@@ -234,6 +264,12 @@ def main():
         help="Total training steps (default: 50000)"
     )
     parser.add_argument(
+        "--save-freq", 
+        type=int, 
+        default=2000,
+        help="Frequency of saving checkpoints (default: 2000)"
+    )
+    parser.add_argument(
         "--list-checkpoints", 
         action="store_true",
         help="List available checkpoints and exit"
@@ -256,7 +292,7 @@ def main():
             args.vec_env_stats = f"./checkpoints/vec_normalize_pixels_agentpos_stats_{steps}.pkl"
             print(f"Auto-detected VecNormalize stats path: {args.vec_env_stats}")
     
-    train_model(args.checkpoint, args.vec_env_stats, args.steps)
+    train_model(args.checkpoint, args.vec_env_stats, args.steps, args.save_freq)
 
 
 if __name__ == "__main__":
