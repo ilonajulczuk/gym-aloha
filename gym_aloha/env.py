@@ -16,7 +16,7 @@ from gym_aloha.tasks.sim_end_effector import (
     InsertionEndEffectorTask,
     TransferCubeEndEffectorTask,
 )
-from gym_aloha.utils import sample_box_pose, sample_insertion_pose, sample_so100_box_pose
+from gym_aloha.utils import fixed_so100_box_pose, sample_box_pose, sample_insertion_pose, sample_so100_box_pose
 
 
 class AlohaEnv(gym.Env):
@@ -86,21 +86,18 @@ class AlohaEnv(gym.Env):
         elif self.obs_type == "so100_pixels_agent_pos":
             self.observation_space = spaces.Dict(
                 {
-                    "pixels": spaces.Dict(
-                        {
-                            "top": spaces.Box(
+                    "pixels": spaces.Box(
                                 low=0,
                                 high=255,
-                                shape=(self.observation_height, self.observation_width, 3),
-                                dtype=np.uint8,
-                            )
-                        }
-                    ),
-                    "agent_pos": spaces.Box(
+                       shape=(self.observation_height, self.observation_width, 3),
+                       dtype=np.uint8,
+                   )
+                ,
+               "agent_pos": spaces.Box(
                         low=-1000.0,
                         high=1000.0,
                         shape=(len(SO100_JOINTS),),
-                        dtype=np.float64,
+                        dtype=np.float32,
                     ),
                 }
             )
@@ -142,7 +139,7 @@ class AlohaEnv(gym.Env):
         elif task_name == "so100_transfer_cube":
             xml_path = ASSETS_DIR / "so100_transfer_cube.xml"
             physics = mujoco.Physics.from_xml_path(str(xml_path))
-            task = SO100TransferCubeTask()
+            task = SO100TransferCubeTask(observation_width=self.observation_width, observation_height=self.observation_height)
         elif task_name == "end_effector_transfer_cube":
             raise NotImplementedError()
             xml_path = ASSETS_DIR / "bimanual_viperx_end_effector_transfer_cube.xml"
@@ -172,9 +169,10 @@ class AlohaEnv(gym.Env):
                 "agent_pos": raw_obs["qpos"],
             }
         elif self.obs_type == "so100_pixels_agent_pos":
+            rgb = raw_obs["images"]["top"].copy()
             obs = {
-                "pixels": {"top": raw_obs["images"]["top"].copy()},
-                "agent_pos": raw_obs["qpos"],
+                "pixels": rgb,
+                "agent_pos": raw_obs["qpos"].astype(np.float32),      # SO100 uses float32,
             }
         return obs
 
@@ -192,7 +190,7 @@ class AlohaEnv(gym.Env):
         elif self.task == "insertion":
             BOX_POSE[0] = np.concatenate(sample_insertion_pose(seed))  # used in sim reset
         elif self.task == "so100_transfer_cube":
-            BOX_POSE[0] = sample_so100_box_pose(seed)  # used in sim reset
+            BOX_POSE[0] = fixed_so100_box_pose(seed)  # used in sim reset
         else:
             raise ValueError(self.task)
 

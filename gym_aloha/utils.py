@@ -28,6 +28,18 @@ def sample_so100_box_pose(seed=None):
     cube_quat = np.array([1, 0, 0, 0])
     return np.concatenate([cube_position, cube_quat])
 
+
+def fixed_so100_box_pose(seed=None):
+    x = -0.2
+    y = 0.45
+    z = 0.05
+
+    cube_position = np.array([x, y, z])
+
+    cube_quat = np.array([1, 0, 0, 0])
+    return np.concatenate([cube_position, cube_quat])
+
+
 def sample_insertion_pose(seed=None):
     # Peg
     x_range = [0.1, 0.2]

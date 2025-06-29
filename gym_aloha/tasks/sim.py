@@ -9,6 +9,7 @@ from gym_aloha.constants import (
     normalize_puppet_gripper_position,
     normalize_puppet_gripper_velocity,
     unnormalize_puppet_gripper_position,
+    unnormalize_so100
 )
 
 BOX_POSE = [None]  # to be changed from outside
@@ -224,25 +225,30 @@ class InsertionTask(BimanualViperXTask):
 class SO100Task(base.Task):
     ARM_DOF = 5
     GRIPPER_DOF = 2  # Dunno why 2 ???
-    def __init__(self, random=None):
+    def __init__(self, random=None, observation_width=640,
+        observation_height=480):
+        self.observation_width = observation_width
+        self.observation_height = observation_height
         super().__init__(random=random)
 
     def before_step(self, action, physics):
-        left_arm_action = action[:self.ARM_DOF]
-        # right_arm_action = action[7 : 7 + 6]
-        normalized_left_gripper_action = action[self.ARM_DOF]
-        # normalized_right_gripper_action = action[7 + 6]
+        left_arm_action = action[:self.ARM_DOF + 1]
+        env_action = unnormalize_so100(left_arm_action)
+        # left_arm_action = action[:self.ARM_DOF]
+        # # right_arm_action = action[7 : 7 + 6]
+        # normalized_left_gripper_action = action[self.ARM_DOF]
+        # # normalized_right_gripper_action = action[7 + 6]
 
-        left_gripper_action = unnormalize_puppet_gripper_position(normalized_left_gripper_action)
-        # right_gripper_action = unnormalize_puppet_gripper_position(normalized_right_gripper_action)
+        # left_gripper_action = unnormalize_puppet_gripper_position(normalized_left_gripper_action)
+        # # right_gripper_action = unnormalize_puppet_gripper_position(normalized_right_gripper_action)
 
-        # full_left_gripper_action = [left_gripper_action, -left_gripper_action]
-        full_left_gripper_action = [left_gripper_action]
-        # full_right_gripper_action = [right_gripper_action, -right_gripper_action]
+        # # full_left_gripper_action = [left_gripper_action, -left_gripper_action]
+        # full_left_gripper_action = [left_gripper_action]
+        # # full_right_gripper_action = [right_gripper_action, -right_gripper_action]
 
-        env_action = np.concatenate(
-            [left_arm_action, full_left_gripper_action]
-        )
+        # env_action = np.concatenate(
+        #     [left_arm_action, full_left_gripper_action]
+        # )
         super().before_step(env_action, physics)
         return
 
@@ -282,9 +288,9 @@ class SO100Task(base.Task):
         obs["qvel"] = self.get_qvel(physics)
         obs["env_state"] = self.get_env_state(physics)
         obs["images"] = {}
-        obs["images"]["top"] = physics.render(height=480, width=640, camera_id="top")
-        obs["images"]["angle"] = physics.render(height=480, width=640, camera_id="angle")
-        obs["images"]["vis"] = physics.render(height=480, width=640, camera_id="front_close")
+        obs["images"]["top"] = physics.render(height=self.observation_height, width=self.observation_width, camera_id="top")
+        obs["images"]["angle"] = physics.render(height=self.observation_height, width=self.observation_width, camera_id="angle")
+        obs["images"]["vis"] = physics.render(height=self.observation_height, width=self.observation_width, camera_id="front_close")
 
         return obs
 
@@ -294,8 +300,10 @@ class SO100Task(base.Task):
 
 
 class SO100TransferCubeTask(SO100Task):
-    def __init__(self, random=None):
-        super().__init__(random=random)
+    def __init__(self, random=None, observation_width=640,
+        observation_height=480):
+        super().__init__(random=random, observation_width=observation_width,
+            observation_height=observation_height)
         self.max_reward = 4
 
     def initialize_episode(self, physics):
@@ -378,20 +386,32 @@ class SO100TransferCubeTask(SO100Task):
 
         # -------- step-wise reward --------
         reward = 0.0
-        if ee_cube_dist < 0.03:
-            reward = max(reward, 0.30)
-        if touch_gripper:
-            reward = max(reward, 0.60)
-        if touch_gripper and (not touch_table):
-            reward = max(reward, 1.00)
-        if cube_over_bin:
-            reward = max(reward, 1.50)
-        if released:
-            reward = max(reward, 2.00)
-            # optional centring bonus
-            d_xy  = np.linalg.norm(cube_pos[:2] - self.bin_center[:2])
-            bonus = 0.5 * (1 - np.clip(d_xy / self.bin_radius, 0, 1))
-            reward += bonus
+        # smooth reach shaping
+        reach_bonus = 0.2 * (1 - np.clip(ee_cube_dist / 0.7, 0, 1))
+        reward = max(reward, reach_bonus)
+
+        if ee_cube_dist < 0.3:  # 30 cm
+            reach_bonus = 0.5 * (1 - np.clip(ee_cube_dist / 0.3, 0, 1))
+            reward = max(reward, reach_bonus)
+        # if touch_gripper:
+        #     reward = max(reward, 0.60)
+        # if touch_gripper and (not touch_table):
+        #     reward = max(reward, 1.00)
+        # if cube_over_bin:
+        #     reward = max(reward, 1.50)
+        # if released:
+        #     reward = max(reward, 2.00)
+        #     # optional centring bonus
+        #     d_xy  = np.linalg.norm(cube_pos[:2] - self.bin_center[:2])
+        #     bonus = 0.5 * (1 - np.clip(d_xy / self.bin_radius, 0, 1))
+        #     reward += bonus
+
+
+        success = ee_cube_dist < 0.05                       # 5 cm
+        if success:                 # terminate early so SAC sees episode return
+            print("SUCCESS  dist =", ee_cube_dist)
+            return self.max_reward
+        reward -= 0.2
 
         return reward
 

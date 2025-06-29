@@ -195,3 +195,15 @@ def convert_puppet_from_joint_to_position(x):
     return unnormalize_puppet_gripper_position(
         (x - PUPPET_GRIPPER_JOINT_CLOSE) / (PUPPET_GRIPPER_JOINT_OPEN - PUPPET_GRIPPER_JOINT_CLOSE)
     )
+
+def unnormalize(num, min_val, max_val):
+    return num * (max_val - min_val) + min_val
+
+def unnormalize_so100(action):
+    action[0] = unnormalize(action[0], -1.92, 1.92)  # rotation around the waist
+    action[1] = unnormalize(action[1], -3.32, 0.174)
+    action[2] = unnormalize(action[2], -0.174, 3.14)  # elbow
+    action[3] = unnormalize(action[3], -1.66, 1.66)  # wrist pitch
+    action[4] = unnormalize(action[4], -2.79, 2.79)  # wrist roll
+    action[5] = unnormalize(action[5], -0.174, 1.75)  # gripper position
+    return action
