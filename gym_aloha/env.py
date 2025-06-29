@@ -16,7 +16,7 @@ from gym_aloha.tasks.sim_end_effector import (
     InsertionEndEffectorTask,
     TransferCubeEndEffectorTask,
 )
-from gym_aloha.utils import sample_box_pose, sample_insertion_pose
+from gym_aloha.utils import sample_box_pose, sample_insertion_pose, sample_so100_box_pose
 
 
 class AlohaEnv(gym.Env):
@@ -192,7 +192,7 @@ class AlohaEnv(gym.Env):
         elif self.task == "insertion":
             BOX_POSE[0] = np.concatenate(sample_insertion_pose(seed))  # used in sim reset
         elif self.task == "so100_transfer_cube":
-            BOX_POSE[0] = sample_box_pose(seed)  # used in sim reset
+            BOX_POSE[0] = sample_so100_box_pose(seed)  # used in sim reset
         else:
             raise ValueError(self.task)
 

@@ -121,11 +121,10 @@
                 <body name="vx300s_left/camera_focus" pos="0.0 -.06 0">
                   <site pos="0 0 0" size="0.01" type="sphere" name="left_cam_focus"
                     rgba="0 0 1 0" />
+                   <site name="ee_site" pos="0 0 0" />
                 </body>
                 <camera name="left_wrist" pos="0 .0 0.55" fovy="20" mode="targetbody" target="vx300s_left/camera_focus"
                    />
-
-                   <!--  -->
                 <body name="Moving_Jaw" pos="-0.0202 -0.0244 0"
                   quat="1.34924e-11 -3.67321e-06 1 -3.67321e-06">
                   <inertial pos="-0.00161745 -0.0303473 0.000449646"

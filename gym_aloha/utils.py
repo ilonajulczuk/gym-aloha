@@ -15,6 +15,19 @@ def sample_box_pose(seed=None):
     return np.concatenate([cube_position, cube_quat])
 
 
+def sample_so100_box_pose(seed=None):
+    x_range = [-0.3, -0.1]
+    y_range = [0.3, 0.6]
+    z_range = [0.05, 0.05]
+
+    rng = np.random.RandomState(seed)
+
+    ranges = np.vstack([x_range, y_range, z_range])
+    cube_position = rng.uniform(ranges[:, 0], ranges[:, 1])
+
+    cube_quat = np.array([1, 0, 0, 0])
+    return np.concatenate([cube_position, cube_quat])
+
 def sample_insertion_pose(seed=None):
     # Peg
     x_range = [0.1, 0.2]

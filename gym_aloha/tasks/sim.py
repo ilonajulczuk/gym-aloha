@@ -315,7 +315,41 @@ class SO100TransferCubeTask(SO100Task):
         env_state = physics.data.qpos.copy()[6:]
         return env_state
 
+    def _precompute_bin_aabb(self, physics):
+        # call in reset(); store on self
+        site_id = physics.model.site("cube_site").id
+        center  = physics.data.site_xpos[site_id].copy()
+        hw = 0.06         # half-width in xy  (edit to match XML)
+        h  = 0.03         # inner height      (edit to match XML)
+        self.bin_min = center + np.array([-hw, -hw, 0.0])
+        self.bin_max = center + np.array([ hw,  hw, h])
+        self.bin_center = center
+        self.bin_radius = hw         # for bonus
+        self.cube_half  = 0.01      # edge/2  (match cube size)
+
+    def _cube_inside_bin(self, cube_pos):
+        lower = cube_pos - self.cube_half
+        upper = cube_pos + self.cube_half
+        return np.all(lower > self.bin_min) and np.all(upper < self.bin_max)
+
+
     def get_reward(self, physics):
+        # -------- helpers --------
+
+        self._precompute_bin_aabb(physics)
+        id_cube_site  = physics.model.site("cube_site").id
+        cube_pos      = physics.data.site_xpos[id_cube_site]
+
+        id_ee_site    = physics.model.site("ee_site").id
+        ee_pos        = physics.data.site_xpos[id_ee_site]
+        ee_cube_dist  = np.linalg.norm(ee_pos - cube_pos)
+
+        CUBE_GEOM = "red_box"
+        TABLE_GEOM = "table"
+        FIXED_FINGER_GEOMS  = {f"fixed_jaw_pad_{i}"  for i in range(1, 5)}
+        MOVING_FINGER_GEOMS = {f"moving_jaw_pad_{i}" for i in range(1, 5)}
+        FINGERTIP_GEOMS     = FIXED_FINGER_GEOMS | MOVING_FINGER_GEOMS
+
         # return whether left gripper is holding the box
         all_contact_pairs = []
         for i_contact in range(physics.data.ncon):
@@ -326,18 +360,39 @@ class SO100TransferCubeTask(SO100Task):
             contact_pair = (name_geom_1, name_geom_2)
             all_contact_pairs.append(contact_pair)
 
-        touch_left_gripper = ("red_box", "vx300s_left/10_left_gripper_finger") in all_contact_pairs
-        touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
-        touch_table = ("red_box", "table") in all_contact_pairs
+        touch_gripper = any(
+            (g1 in FINGERTIP_GEOMS and g2 == CUBE_GEOM) or
+            (g2 in FINGERTIP_GEOMS and g1 == CUBE_GEOM)
+            for (g1, g2) in all_contact_pairs
+        )
 
-        reward = 0
-        if touch_right_gripper:
-            reward = 1
-        if touch_right_gripper and not touch_table:  # lifted
-            reward = 2
-        if touch_left_gripper:  # attempted transfer
-            reward = 3
-        if touch_left_gripper and not touch_table:  # successful transfer
-            reward = 4
+        touch_table   = (CUBE_GEOM, TABLE_GEOM) in all_contact_pairs
+
+        cube_over_bin = (
+            (self.bin_min[0] < cube_pos[0] < self.bin_max[0]) and
+            (self.bin_min[1] < cube_pos[1] < self.bin_max[1])
+        )
+
+        inside_bin = self._cube_inside_bin(cube_pos)
+        released   = inside_bin and (not touch_gripper)
+
+        # -------- step-wise reward --------
+        reward = 0.0
+        if ee_cube_dist < 0.03:
+            reward = max(reward, 0.30)
+        if touch_gripper:
+            reward = max(reward, 0.60)
+        if touch_gripper and (not touch_table):
+            reward = max(reward, 1.00)
+        if cube_over_bin:
+            reward = max(reward, 1.50)
+        if released:
+            reward = max(reward, 2.00)
+            # optional centring bonus
+            d_xy  = np.linalg.norm(cube_pos[:2] - self.bin_center[:2])
+            bonus = 0.5 * (1 - np.clip(d_xy / self.bin_radius, 0, 1))
+            reward += bonus
+
         return reward
+
 
