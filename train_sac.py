@@ -52,17 +52,13 @@ def create_model(vec_env, log_dir):
     model = SAC(
         policy="MultiInputPolicy",
         env=vec_env,
-        learning_rate=1e-4,        # Keep your current rate
+        learning_rate=3e-4,        # Keep your current rate
         buffer_size=50_000,        # Increase this (big stability gain)
         batch_size=256,            # Increase this (stability)
         ent_coef='auto',
-        target_entropy=-2.0,       # Fix entropy (stop the chaos)
+        target_entropy=-0.5,       # Fix entropy (stop the chaos)
         device=device,
         tensorboard_log=log_dir,
-        # policy_kwargs    ={
-        #     # keep default NatureCNN; change later if FPS is painful
-        #     "features_extractor_kwargs": {"features_dim": 128},
-        # },
     )
     model.set_logger(new_logger)
     return model
@@ -99,29 +95,15 @@ def load_checkpoint(checkpoint_path, vec_env_stats_path, vec_env, log_dir):
 
 def create_callbacks(vec_env, save_freq=2000):
     """Create training callbacks for model and environment checkpointing."""
-    model_checkpoint = CheckpointCallback(
+    checkpoint_callback = CheckpointCallback(
         save_freq=save_freq,
-        save_path='./checkpoints/',
-        name_prefix='sac_so100_pixels_agentpos',
+        save_path="./checkpoints/",
+        name_prefix="sac_so100_get_cube",
+        save_replay_buffer=True,
+        save_vecnormalize=True,
     )
 
-    # Vec env checkpoint
-    class VecEnvSaveCallback(BaseCallback):
-        def __init__(self, save_freq, save_path, vec_env):
-            super().__init__()
-            self.save_freq = save_freq
-            self.save_path = save_path
-            self.vec_env = vec_env
-
-        def _on_step(self) -> bool:
-            if self.n_calls % self.save_freq == 0:
-                self.vec_env.save(f"{self.save_path}/vec_normalize_pixels_agentpos_stats_{self.n_calls}.pkl")
-            return True
-
-    vec_env_checkpoint = VecEnvSaveCallback(save_freq, './checkpoints/', vec_env)
-
-    # Combine both callbacks
-    return CallbackList([model_checkpoint, vec_env_checkpoint])
+    return checkpoint_callback
 
 class StageBasedTraining:
     def __init__(self, model, vec_env, callback=None, start_steps=0):
@@ -133,7 +115,7 @@ class StageBasedTraining:
         # Define stage boundaries
         self.stage1_end = 20000
         self.stage2_end = 35000
-        self.stage3_end = 50000
+        self.stage3_end = 55000
 
     def train(self):
         current_steps = self.start_steps
@@ -142,7 +124,7 @@ class StageBasedTraining:
         if current_steps < self.stage1_end:
             remaining_stage1 = self.stage1_end - current_steps
             print(f"Stage 1: Exploration phase (continuing from step {current_steps}, {remaining_stage1} steps remaining)")
-            self.model.target_entropy = -1.0  # High exploration
+            self.model.target_entropy = -0.5  # High exploration
             self.model.learning_rate = 3e-4   # Fast learning
             self.model.learn(remaining_stage1, callback=self.callback)
             current_steps = self.stage1_end
@@ -171,7 +153,7 @@ class StageBasedTraining:
             print(f"Stage 3: Already completed (started from step {current_steps})")
             print("All training stages completed!")
 
-def train_model(checkpoint_path=None, vec_env_stats_path=None, total_steps=50000, save_freq=2000):
+def train_model(checkpoint_path=None, vec_env_stats_path=None, total_steps=50000, save_freq=1000):
     """Main training function with optional checkpoint loading."""
     log_dir = "logs/sac_so100"  # will hold TB files
     
@@ -266,8 +248,8 @@ def main():
     parser.add_argument(
         "--save-freq", 
         type=int, 
-        default=2000,
-        help="Frequency of saving checkpoints (default: 2000)"
+        default=1000,
+        help="Frequency of saving checkpoints (default: 1000)"
     )
     parser.add_argument(
         "--list-checkpoints", 

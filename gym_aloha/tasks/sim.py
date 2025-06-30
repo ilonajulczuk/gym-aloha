@@ -396,22 +396,30 @@ class SO100TransferCubeTask(SO100Task):
         inside_bin = self._cube_inside_bin(cube_pos)
         released   = inside_bin and (not touch_gripper)
 
-        # -------- step-wise reward --------
         reward = 0.0
-        # smooth reach shaping
-        reach_bonus = 0.2 * (1 - np.clip(ee_cube_dist / 0.7, 0, 1))
-        reward = max(reward, reach_bonus)
 
-        if ee_cube_dist < 0.3:  # 30 cm
-            reach_bonus = 0.5 * (1 - np.clip(ee_cube_dist / 0.3, 0, 1))
-            reward = max(reward, reach_bonus)
+        # Multi-stage distance rewards (smoother progression)
+        if ee_cube_dist < 0.7:
+            reward = max(reward, 0.1 * (1 - ee_cube_dist/0.7))
+        if ee_cube_dist < 0.5:
+            reward = max(reward, 0.2 * (1 - ee_cube_dist/0.5))
+        if ee_cube_dist < 0.3:
+            reward = max(reward, 0.5 * (1 - ee_cube_dist/0.3))
+        if ee_cube_dist < 0.1:  # NEW: bridge the gap
+            reward = max(reward, 1.0 * (1 - ee_cube_dist/0.1))
+        if ee_cube_dist < 0.05:
+            reward = max(reward, 2.0 * (1 - ee_cube_dist/0.05))
 
-        success = ee_cube_dist < 0.05                       # 5 cm
-        if success:                 # terminate early so SAC sees episode return
-            print("SUCCESS  dist =", ee_cube_dist)
+        # Add contact bonus (already have the code!)
+        if touch_gripper:
+            reward += 1.0  # Big bonus for actually touching
+
+        success = touch_gripper and ee_cube_dist < 0.05
+        if success:
+            print("SUCCESS!")
             return self.max_reward
-        reward -= 0.2
 
+        reward -= 0.2
         return reward
 
         # if touch_gripper:

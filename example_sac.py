@@ -17,7 +17,6 @@ env = gym.make(
 )
 
 env = RecordEpisodeStatistics(env)
-# STEP 2: Apply the EXACT same wrappers in the EXACT same order
 vec_env = DummyVecEnv([lambda: env])
 vec_env = VecTransposeImage(vec_env)
 demo_env = VecNormalize(
@@ -25,25 +24,26 @@ demo_env = VecNormalize(
     norm_obs=True,
     norm_reward=False,
     clip_obs=10.0,
-    training=False,  # ← IMPORTANT: Set to False for demo/inference
+    training=False,
 )
 
+
+# Then load model
 device = "mps" if torch.backends.mps.is_available() else "cpu"
+model = SAC.load("./checkpoints/sac_so100_get_cube_18000_steps.zip", env=demo_env, device=device)
+print("Model loaded!")
 
-# STEP 3: Load the model
-model = SAC.load("./checkpoints/sac_so100_pixels_agentpos_20000_steps", env=demo_env, device=device)
-
-# STEP 4: Load the normalization statistics
-demo_env = VecNormalize.load("./checkpoints/vec_normalize_stats_20000.pkl", demo_env)
-
-print("Model and normalization stats loaded successfully!")
+# Load normalization stats into the CORRECT environment
+demo_env = VecNormalize.load("./checkpoints/sac_so100_get_cube_vecnormalize_18000_steps.pkl", demo_env)
+print("VecNormalize stats loaded!")
+model.set_env(demo_env)  # Set the environment for the model
 
 # STEP 5: Run the demo
 observation = demo_env.reset()
 frames = []
 max_steps = 1000
 steps = 0
-action, _ = model.predict(observation, deterministic=True)
+action, _ = model.predict(observation, deterministic=False)
 step_result = demo_env.step(action)
 print(f"demo_env.step() returns {len(step_result)} values")
 
@@ -53,6 +53,7 @@ ret = 0
 while steps < max_steps:
     # Get action from trained model
     action, _ = model.predict(observation, deterministic=True)
+    action = np.clip(action, -1, 1)
     
     # Step the environment
     step_result = demo_env.step(action)
@@ -61,7 +62,9 @@ while steps < max_steps:
         terminated = truncated = done
     else:
         observation, reward, terminated, truncated, info = step_result
-    
+    # if steps % 5 == 0:
+    #     print("Observations:", observation)\
+
     ret += reward[0]  # VecEnv returns arrays, so we take the first element
     # Get frame from the wrapped environment
     frame = demo_env.render()
@@ -86,7 +89,7 @@ demo_env.close()
 # STEP 6: Save video
 if frames:
     print(f"Saving {len(frames)} frames to video...")
-    imageio.mimsave("so100_sac_demo_50k_n_.mp4", np.stack(frames), fps=25)
-    print("Saved video to so100_sac_demo_50k_n_.mp4")
+    imageio.mimsave("so100_sac_demo_50k_n_2.mp4", np.stack(frames), fps=25)
+    print("Saved video to so100_sac_demo_50k_n_2.mp4")
 else:
     print("No frames captured!")
